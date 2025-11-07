@@ -43,6 +43,8 @@ joblib = "^1.3.0"
 mlflow = "^3.5.0rc0"
 redis = {version = "^7.0.1", optional = true}
 plotly = "^5.18.0"
+rich = "^13.7.0"  # CLI pretty output and progress bars
+pyyaml = "^6.0.1"  # YAML config support
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -67,7 +69,7 @@ mkdocstrings = {extras = ["python"], version = "^0.24.0"}
 pymdown-extensions = "^10.7.0"
 
 [tool.poetry.scripts]
-shap-analytics = "shap_analytics.shap_explain:main"
+shap-analytics = "shap_analytics.cli:main"
 
 [tool.poetry.extras]
 redis = ["redis"]
