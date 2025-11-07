@@ -1,0 +1,162 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in SHAP Analytics
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us investigate and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the bug you encountered...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Provide detailed steps to reproduce the issue.
+      placeholder: |
+        1. Load data with...
+        2. Initialize SHAP explainer with...
+        3. Call method...
+        4. See error...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Describe what you expected to happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error messages, stack traces, or unexpected output.
+      placeholder: Paste error messages or describe actual behavior...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Minimal Reproducible Example
+      description: Provide a minimal code example that reproduces the issue.
+      placeholder: |
+        import shap
+        import numpy as np
+
+        # Your minimal reproducible code here
+      render: python
+    validations:
+      required: false
+
+  - type: input
+    id: shap-version
+    attributes:
+      label: SHAP Version
+      description: Which version of SHAP are you using?
+      placeholder: e.g., 0.41.0
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: Which Python version are you using?
+      placeholder: e.g., 3.9.7
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: Which operating system are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Docker Container
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      description: Which version of the operating system?
+      placeholder: e.g., Ubuntu 22.04, macOS 13.1, Windows 11
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: Any additional environment details (Docker version, key library versions, etc.)
+      placeholder: |
+        - NumPy version: 1.24.0
+        - Pandas version: 1.5.2
+        - Scikit-learn version: 1.2.0
+        - Docker version: 20.10.21 (if applicable)
+      render: markdown
+    validations:
+      required: false
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment Method
+      description: How are you running SHAP Analytics?
+      options:
+        - Local Development
+        - Docker Container
+        - FastAPI Service
+        - Jupyter Notebook
+        - Production Server
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem (screenshots, logs, related issues, etc.)
+      placeholder: Any additional information that might help...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: I have searched existing issues to ensure this bug hasn't been reported
+          required: true
+        - label: I have provided a minimal reproducible example
+          required: false
+        - label: I have included the full error traceback
+          required: false

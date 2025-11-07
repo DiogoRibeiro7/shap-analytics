@@ -268,7 +268,7 @@ def improve_error_handling(log_file: str = "logs/shap_app.log") -> logging.Logge
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                logger_app.warning(f"API call failed ({i+1}/{retries}): {e}")
+                logger_app.warning(f"API call failed ({i + 1}/{retries}): {e}")
                 if i < retries - 1:
                     time.sleep(delay * (i + 1))
         logger_app.error("API call failed after all retries")

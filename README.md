@@ -65,6 +65,17 @@ SHAP Analytics is a comprehensive Python library for computing, analyzing, visua
 
 ## Installation
 
+### Requirements
+
+**Important**: This project requires **NumPy < 2.0.0** for compatibility with SHAP 0.45.0. NumPy 2.x introduced breaking API changes that are not yet supported by the SHAP library.
+
+Minimum requirements:
+- Python >= 3.10
+- NumPy >= 1.24.0, < 2.0.0
+- pandas >= 2.0.0
+- scikit-learn >= 1.3.0
+- SHAP >= 0.43.0
+
 ### Using Poetry (Recommended)
 
 ```bash

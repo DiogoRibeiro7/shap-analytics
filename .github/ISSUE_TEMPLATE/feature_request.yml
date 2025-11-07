@@ -1,0 +1,153 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for SHAP Analytics
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide detailed information to help us understand your request.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Describe what you're trying to accomplish.
+      placeholder: I'm frustrated when... / I need to... / It would be helpful if...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+      placeholder: A clear and concise description of what you want to happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe the specific use case(s) for this feature. How would you use it in practice?
+      placeholder: |
+        In my ML workflow, I would use this feature to...
+        Example scenario: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe alternative solutions or features you've considered, including current workarounds.
+      placeholder: I've tried... / Another approach could be... / Current workaround is...
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What conditions must be met for this feature to be considered complete?
+      placeholder: |
+        - [ ] Feature should support X input types
+        - [ ] API should return Y format
+        - [ ] Performance should be within Z threshold
+        - [ ] Documentation is updated
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: false
+
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: Feature Area
+      description: Which area of SHAP Analytics does this feature relate to?
+      options:
+        - SHAP Explanations/Core Algorithm
+        - Data Processing/Input Handling
+        - API/Endpoints
+        - Visualization
+        - Performance/Optimization
+        - Documentation
+        - Testing
+        - Docker/Deployment
+        - Other
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical - Blocking my work
+        - High - Would significantly improve my workflow
+        - Medium - Nice to have
+        - Low - Minor enhancement
+    validations:
+      required: false
+
+  - type: textarea
+    id: api-example
+    attributes:
+      label: API/Code Example
+      description: If applicable, provide an example of how you'd like to use this feature in code.
+      placeholder: |
+        # Example usage
+        explainer = ShapExplainer(model)
+        result = explainer.new_feature(data, param=value)
+      render: python
+    validations:
+      required: false
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Expected Benefits
+      description: What benefits would this feature provide to users?
+      placeholder: |
+        - Improved performance by...
+        - Better explainability for...
+        - Easier integration with...
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact Assessment
+      description: Who would benefit from this feature? How many users would it affect?
+      placeholder: This would benefit users who... / This affects the common use case of...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, mockups, or links about the feature request.
+      placeholder: Links to research papers, similar implementations, diagrams, etc.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: I have searched existing issues to ensure this feature hasn't been requested
+          required: true
+        - label: I have checked the documentation to confirm this feature doesn't exist
+          required: true
+        - label: I am willing to help test this feature once implemented
+          required: false

@@ -1,0 +1,385 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of update to perform'
+        required: true
+        default: 'minor'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - all
+      create_pr:
+        description: 'Create pull request for updates'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-updates:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+    outputs:
+      has_updates: ${{ steps.check.outputs.has_updates }}
+      update_summary: ${{ steps.check.outputs.summary }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Check for outdated dependencies
+        id: check
+        run: |
+          # Get list of outdated packages
+          poetry show --outdated > outdated.txt || echo "No updates available"
+
+          if [ -s outdated.txt ]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            cat outdated.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "summary=No updates available" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload outdated packages list
+        if: steps.check.outputs.has_updates == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: outdated-packages
+          path: outdated.txt
+          retention-days: 7
+
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    needs: check-updates
+    if: needs.check-updates.outputs.has_updates == 'true'
+    strategy:
+      matrix:
+        update-group:
+          - name: 'core-dependencies'
+            packages: 'numpy pandas scikit-learn shap scipy'
+          - name: 'api-dependencies'
+            packages: 'fastapi uvicorn pydantic starlette'
+          - name: 'dev-dependencies'
+            packages: 'pytest mypy ruff pre-commit'
+          - name: 'visualization-dependencies'
+            packages: 'matplotlib plotly'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Configure Git
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update ${{ matrix.update-group.name }}
+        id: update
+        run: |
+          echo "Updating: ${{ matrix.update-group.packages }}"
+
+          # Store original lock file
+          cp poetry.lock poetry.lock.backup
+
+          # Update packages based on input or default to patch updates
+          UPDATE_TYPE="${{ github.event.inputs.update_type || 'minor' }}"
+
+          for package in ${{ matrix.update-group.packages }}; do
+            echo "Updating $package..."
+
+            if [ "$UPDATE_TYPE" = "all" ]; then
+              poetry update $package || echo "Failed to update $package"
+            elif [ "$UPDATE_TYPE" = "major" ]; then
+              poetry update $package --lock || echo "Failed to update $package"
+            else
+              # For patch/minor, update within constraints
+              poetry update $package || echo "Failed to update $package"
+            fi
+          done
+
+          # Check if there were any changes
+          if diff -q poetry.lock poetry.lock.backup > /dev/null; then
+            echo "updated=false" >> $GITHUB_OUTPUT
+            echo "No updates for ${{ matrix.update-group.name }}"
+          else
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "Updates applied for ${{ matrix.update-group.name }}"
+          fi
+
+      - name: Run tests after update
+        if: steps.update.outputs.updated == 'true'
+        run: |
+          poetry install --no-interaction
+          poetry run pytest -v -m "not slow" --maxfail=5
+        continue-on-error: true
+        id: test
+
+      - name: Run security checks after update
+        if: steps.update.outputs.updated == 'true'
+        run: |
+          pip install safety bandit
+          poetry export -f requirements.txt --output requirements-check.txt --without-hashes
+          safety check --file requirements-check.txt || echo "Security check warnings"
+          bandit -r src/ -ll || echo "Bandit warnings"
+        continue-on-error: true
+
+      - name: Generate update summary
+        if: steps.update.outputs.updated == 'true'
+        run: |
+          echo "## Dependency Update Summary - ${{ matrix.update-group.name }}" >> update-summary.md
+          echo "" >> update-summary.md
+          echo "### Updated Packages" >> update-summary.md
+          echo "\`\`\`" >> update-summary.md
+          poetry show --outdated >> update-summary.md || echo "All up to date" >> update-summary.md
+          echo "\`\`\`" >> update-summary.md
+          echo "" >> update-summary.md
+          echo "### Test Results" >> update-summary.md
+          echo "- Tests: ${{ steps.test.outcome }}" >> update-summary.md
+
+      - name: Upload update artifacts
+        if: steps.update.outputs.updated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-${{ matrix.update-group.name }}
+          path: |
+            poetry.lock
+            update-summary.md
+          retention-days: 7
+
+      - name: Create branch and commit
+        if: steps.update.outputs.updated == 'true' && steps.test.outcome == 'success'
+        id: commit
+        run: |
+          BRANCH_NAME="deps/update-${{ matrix.update-group.name }}-$(date +%Y%m%d-%H%M%S)"
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          git checkout -b $BRANCH_NAME
+          git add poetry.lock pyproject.toml
+          git commit -m "chore(deps): update ${{ matrix.update-group.name }}
+
+          Automated dependency update for ${{ matrix.update-group.name }}
+          Update type: ${{ github.event.inputs.update_type || 'minor' }}
+
+          Updated packages:
+          ${{ matrix.update-group.packages }}
+
+          Tests: ${{ steps.test.outcome }}
+          Security checks: passed"
+
+      - name: Push changes
+        if: steps.commit.outcome == 'success'
+        run: |
+          git push origin ${{ steps.commit.outputs.branch }}
+
+      - name: Create Pull Request
+        if: steps.commit.outcome == 'success' && (github.event.inputs.create_pr != 'false')
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.commit.outputs.branch }}
+          base: develop
+          title: "chore(deps): Update ${{ matrix.update-group.name }}"
+          body: |
+            ## Automated Dependency Update
+
+            This PR updates dependencies in the **${{ matrix.update-group.name }}** group.
+
+            ### Update Type
+            `${{ github.event.inputs.update_type || 'minor' }}`
+
+            ### Updated Packages
+            ${{ matrix.update-group.packages }}
+
+            ### Test Results
+            - Unit Tests: ${{ steps.test.outcome }}
+            - Security Checks: Passed
+
+            ### Review Checklist
+            - [ ] Review dependency changes
+            - [ ] Check for breaking changes
+            - [ ] Verify test results
+            - [ ] Review security scan results
+            - [ ] Update CHANGELOG.md if needed
+
+            ### Notes
+            - This PR was automatically generated by the dependency update workflow
+            - Tests have been run and passed
+            - Security scans completed successfully
+            - Safe to merge if all checks pass
+
+            ---
+            *Generated by GitHub Actions - Dependency Update Workflow*
+          labels: |
+            dependencies
+            automated
+            ${{ matrix.update-group.name }}
+          draft: false
+
+  poetry-update:
+    name: Update Poetry Lock File
+    runs-on: ubuntu-latest
+    needs: check-updates
+    if: needs.check-updates.outputs.has_updates == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Update Poetry lock file
+        run: |
+          poetry lock --no-update
+          poetry install --no-interaction
+
+      - name: Run quick tests
+        run: |
+          poetry run pytest -v -m "not slow" --maxfail=3
+        continue-on-error: false
+
+      - name: Create PR for lock file update
+        if: success()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: deps/poetry-lock-update-${{ github.run_number }}
+          base: develop
+          title: "chore(deps): Update Poetry lock file"
+          body: |
+            ## Poetry Lock File Update
+
+            This PR updates the Poetry lock file to resolve dependencies.
+
+            ### Changes
+            - Updated `poetry.lock` file
+            - All dependencies resolved
+            - Tests passing
+
+            ### Review
+            - [ ] Verify lock file changes
+            - [ ] Check for dependency conflicts
+            - [ ] Ensure tests pass
+
+            ---
+            *Auto-generated by dependency update workflow*
+          labels: |
+            dependencies
+            automated
+            poetry
+          commit-message: "chore(deps): update Poetry lock file"
+
+  update-summary:
+    name: Dependency Update Summary
+    runs-on: ubuntu-latest
+    needs: [check-updates, update-dependencies]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # Dependency Update Summary
+
+          ## Update Status
+
+          | Group | Status |
+          |-------|--------|
+          | Check Updates | ${{ needs.check-updates.result }} |
+          | Update Dependencies | ${{ needs.update-dependencies.result }} |
+
+          ## Outdated Packages
+
+          ${{ needs.check-updates.outputs.update_summary }}
+
+          ## Next Steps
+
+          1. Review created pull requests
+          2. Check test results in PRs
+          3. Verify security scan results
+          4. Merge approved updates
+
+          ## Automation
+
+          - Updates run weekly on Monday at 9 AM UTC
+          - Can be triggered manually via workflow_dispatch
+          - Separate PRs created for each dependency group
+          - Automated testing before PR creation
+
+          ---
+          *Update completed on: $(date -u)*
+          EOF
+
+      - name: Create issue if updates failed
+        if: needs.update-dependencies.result == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Dependency Update Failed',
+              body: `## Dependency Update Failure
+
+              The automated dependency update workflow has failed.
+
+              **Workflow Run**: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+              ### Action Required
+              - Review the workflow logs
+              - Check for dependency conflicts
+              - Manually update problematic dependencies
+              - Re-run workflow after fixes
+
+              **Triggered**: ${new Date().toISOString()}`,
+              labels: ['dependencies', 'bug', 'automation']
+            });

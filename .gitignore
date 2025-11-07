@@ -166,6 +166,7 @@ feedback.json
 model_registry.json
 feature_registry.yaml
 config/cloud.json
+.claude
 .github/workflows/ci_extended.yml
 .github/workflows/validate_drift.yml
 .github/workflows/semantic_release.yml

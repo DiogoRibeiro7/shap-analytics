@@ -16,7 +16,7 @@ from pathlib import Path
 
 def count_tests(file_path: Path) -> tuple[int, int, list[str]]:
     """Count test classes and functions in a test file."""
-    with file_path.open(encoding='utf-8') as f:
+    with file_path.open(encoding="utf-8") as f:
         tree = ast.parse(f.read())
 
     test_classes = 0
@@ -24,9 +24,9 @@ def count_tests(file_path: Path) -> tuple[int, int, list[str]]:
     test_names = []
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name.startswith('Test'):
+        if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
             test_classes += 1
-        elif isinstance(node, ast.FunctionDef) and node.name.startswith('test_'):
+        elif isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
             test_functions += 1
             test_names.append(node.name)
 
@@ -35,14 +35,16 @@ def count_tests(file_path: Path) -> tuple[int, int, list[str]]:
 
 def validate_fixtures(conftest_path: Path) -> list[str]:
     """Extract fixture names from conftest.py."""
-    with conftest_path.open(encoding='utf-8') as f:
+    with conftest_path.open(encoding="utf-8") as f:
         tree = ast.parse(f.read())
 
     fixtures = []
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             for decorator in node.decorator_list:
-                if (hasattr(decorator, 'id') and decorator.id == 'fixture') or (hasattr(decorator, 'attr') and decorator.attr == 'fixture'):
+                if (hasattr(decorator, "id") and decorator.id == "fixture") or (
+                    hasattr(decorator, "attr") and decorator.attr == "fixture"
+                ):
                     fixtures.append(node.name)
 
     return fixtures
@@ -50,22 +52,29 @@ def validate_fixtures(conftest_path: Path) -> list[str]:
 
 def check_test_naming(test_names: list[str]) -> dict[str, list[str]]:
     """Check test naming conventions."""
-    issues = {
-        'missing_verb': [],
-        'too_short': [],
-        'good': []
-    }
+    issues = {"missing_verb": [], "too_short": [], "good": []}
 
-    verbs = ['test_', 'creates', 'handles', 'validates', 'computes',
-             'generates', 'runs', 'stores', 'retrieves', 'with', 'when']
+    verbs = [
+        "test_",
+        "creates",
+        "handles",
+        "validates",
+        "computes",
+        "generates",
+        "runs",
+        "stores",
+        "retrieves",
+        "with",
+        "when",
+    ]
 
     for name in test_names:
         if len(name) < 10:
-            issues['too_short'].append(name)
+            issues["too_short"].append(name)
         elif any(verb in name.lower() for verb in verbs):
-            issues['good'].append(name)
+            issues["good"].append(name)
         else:
-            issues['missing_verb'].append(name)
+            issues["missing_verb"].append(name)
 
     return issues
 
@@ -78,15 +87,15 @@ def main():
     print()
 
     # Validate test files exist
-    test_dir = Path('tests')
+    test_dir = Path("tests")
     if not test_dir.exists():
         print("❌ ERROR: tests/ directory not found")
         sys.exit(1)
 
     test_files = {
-        'expansion': test_dir / 'test_shap_expansion.py',
-        'future': test_dir / 'test_shap_future.py',
-        'conftest': test_dir / 'conftest.py',
+        "expansion": test_dir / "test_shap_expansion.py",
+        "future": test_dir / "test_shap_future.py",
+        "conftest": test_dir / "conftest.py",
     }
 
     for _name, path in test_files.items():
@@ -104,7 +113,7 @@ def main():
     print("Test File Analysis:")
     print("-" * 60)
 
-    for name in ['expansion', 'future']:
+    for name in ["expansion", "future"]:
         file_path = test_files[name]
         classes, functions, names = count_tests(file_path)
         total_classes += classes
@@ -123,7 +132,7 @@ def main():
     print()
 
     # Validate fixtures
-    fixtures = validate_fixtures(test_files['conftest'])
+    fixtures = validate_fixtures(test_files["conftest"])
     print(f"✅ Found {len(fixtures)} fixtures in conftest.py:")
     for fixture in fixtures:
         print(f"   - {fixture}")
@@ -139,11 +148,11 @@ def main():
     print(f"⚠️  Missing verb:      {len(naming_issues['missing_verb']):3d}")
     print()
 
-    if naming_issues['too_short']:
+    if naming_issues["too_short"]:
         print("Short test names (consider making more descriptive):")
-        for name in naming_issues['too_short'][:5]:
+        for name in naming_issues["too_short"][:5]:
             print(f"   - {name}")
-        if len(naming_issues['too_short']) > 5:
+        if len(naming_issues["too_short"]) > 5:
             print(f"   ... and {len(naming_issues['too_short']) - 5} more")
         print()
 
@@ -153,8 +162,8 @@ def main():
     print("=" * 60)
 
     coverage_estimate = {
-        'shap_expansion.py': '85%',
-        'shap_future.py': '82%',
+        "shap_expansion.py": "85%",
+        "shap_future.py": "82%",
     }
 
     print("\nEstimated Coverage:")
@@ -169,5 +178,5 @@ def main():
     print()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

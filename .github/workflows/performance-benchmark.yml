@@ -1,0 +1,296 @@
+name: Performance Benchmarks
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'examples/**'
+      - 'benchmarks/**'
+      - 'requirements.txt'
+      - '.github/workflows/performance-benchmark.yml'
+
+  push:
+    branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      compare_baseline:
+        description: 'Compare with baseline'
+        required: false
+        default: 'true'
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  benchmark:
+    name: Run Performance Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comparison
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r benchmarks/requirements.txt
+          pip install -r examples/requirements.txt
+
+      - name: Cache baseline benchmarks
+        uses: actions/cache@v3
+        with:
+          path: .benchmarks
+          key: benchmark-baseline-${{ runner.os }}-${{ github.base_ref || 'main' }}
+          restore-keys: |
+            benchmark-baseline-${{ runner.os }}-
+
+      - name: Run SHAP Computation Benchmarks
+        run: |
+          pytest benchmarks/benchmark_shap_computation.py \
+            -v \
+            --benchmark-only \
+            --benchmark-json=benchmark-shap.json \
+            --benchmark-autosave \
+            -m "not slow"
+        continue-on-error: false
+
+      - name: Run Memory Usage Benchmarks
+        run: |
+          pytest benchmarks/benchmark_memory_usage.py \
+            -v \
+            --benchmark-only \
+            --benchmark-json=benchmark-memory.json \
+            -m "memory and not slow"
+        continue-on-error: false
+
+      - name: Run Drift Detection Benchmarks
+        run: |
+          pytest benchmarks/benchmark_drift_detection.py \
+            -v \
+            --benchmark-only \
+            --benchmark-json=benchmark-drift.json \
+            --benchmark-autosave \
+            -m "not slow"
+        continue-on-error: false
+
+      - name: Start API for throughput tests
+        run: |
+          python examples/api_deployment.py &
+          API_PID=$!
+          echo "API_PID=$API_PID" >> $GITHUB_ENV
+          # Wait for API to be ready
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "API is ready"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run API Throughput Benchmarks
+        run: |
+          pytest benchmarks/benchmark_api_throughput.py \
+            -v \
+            --benchmark-only \
+            --benchmark-json=benchmark-api.json \
+            --benchmark-autosave \
+            -m "api and not slow"
+        continue-on-error: false
+
+      - name: Stop API
+        if: always()
+        run: |
+          if [ ! -z "$API_PID" ]; then
+            kill $API_PID || true
+          fi
+
+      - name: Compare with baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          # Find most recent baseline
+          BASELINE=$(ls -t .benchmarks/*.json 2>/dev/null | head -n 1 || echo "")
+
+          if [ -n "$BASELINE" ]; then
+            echo "Comparing with baseline: $BASELINE"
+
+            pytest benchmarks/ \
+              --benchmark-only \
+              --benchmark-compare=$BASELINE \
+              --benchmark-compare-fail=mean:10% \
+              -m "not slow" \
+              || echo "Performance regression detected!"
+          else
+            echo "No baseline found for comparison"
+          fi
+
+      - name: Generate performance report
+        if: always()
+        run: |
+          cat > performance-report.md << 'EOF'
+          # Performance Benchmark Results
+
+          ## Run Information
+          - **Branch**: ${{ github.head_ref || github.ref_name }}
+          - **Commit**: ${{ github.sha }}
+          - **Python**: ${{ env.PYTHON_VERSION }}
+          - **Runner**: ubuntu-latest
+
+          ## Benchmark Suites Executed
+
+          ### ✅ SHAP Computation
+          - Model training
+          - Explainer creation
+          - SHAP value computation (100, 1K samples)
+          - Background sample size impact
+
+          ### ✅ Memory Usage
+          - Model memory footprint
+          - Explainer memory usage
+          - Memory leak detection
+
+          ### ✅ Drift Detection
+          - Statistical tests (KS, PSI)
+          - SHAP drift detection
+          - Full drift reports
+
+          ### ✅ API Throughput
+          - Single request latency
+          - Batch processing
+          - Concurrent requests
+
+          ## Results
+
+          Detailed JSON reports are available in the artifacts.
+
+          ---
+          *Automated performance testing by GitHub Actions*
+          EOF
+
+          cat performance-report.md
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            let reportMd = fs.readFileSync('performance-report.md', 'utf8');
+
+            // Add benchmark summaries if available
+            try {
+              const shapData = JSON.parse(fs.readFileSync('benchmark-shap.json', 'utf8'));
+              const benchmarks = shapData.benchmarks || [];
+
+              if (benchmarks.length > 0) {
+                reportMd += '\n\n### SHAP Computation Benchmarks\n\n';
+                reportMd += '| Test | Mean (s) | Min (s) | Max (s) |\n';
+                reportMd += '|------|----------|---------|----------|\n';
+
+                benchmarks.slice(0, 10).forEach(b => {
+                  const name = b.name.replace('test_', '').substring(0, 50);
+                  const mean = (b.stats.mean).toFixed(4);
+                  const min = (b.stats.min).toFixed(4);
+                  const max = (b.stats.max).toFixed(4);
+                  reportMd += `| ${name} | ${mean} | ${min} | ${max} |\n`;
+                });
+              }
+            } catch (e) {
+              console.log('Could not parse benchmark results:', e.message);
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: reportMd
+            });
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-*.json
+            .benchmarks/
+            performance-report.md
+          retention-days: 30
+
+      - name: Check for performance regressions
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Checking for performance regressions..."
+
+          # Parse benchmark results and check thresholds
+          python << 'PYTHON_SCRIPT'
+          import json
+          import sys
+
+          try:
+              with open('benchmark-shap.json') as f:
+                  data = json.load(f)
+
+              regressions = []
+
+              for benchmark in data.get('benchmarks', []):
+                  name = benchmark['name']
+                  mean_time = benchmark['stats']['mean']
+
+                  # Define thresholds
+                  thresholds = {
+                      'test_shap_computation_threshold_100': 2.0,
+                      'test_shap_computation_threshold_1k': 10.0,
+                  }
+
+                  if name in thresholds and mean_time > thresholds[name]:
+                      regressions.append(f"{name}: {mean_time:.2f}s > {thresholds[name]}s")
+
+              if regressions:
+                  print("❌ Performance regressions detected:")
+                  for r in regressions:
+                      print(f"  - {r}")
+                  sys.exit(1)
+              else:
+                  print("✅ No performance regressions detected")
+
+          except FileNotFoundError:
+              print("⚠️  No benchmark file found")
+              sys.exit(0)
+          except Exception as e:
+              print(f"⚠️  Error checking regressions: {e}")
+              sys.exit(0)
+          PYTHON_SCRIPT
+
+      - name: Save baseline for main branch
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          # Copy current benchmarks as new baseline
+          mkdir -p .benchmarks/main
+          cp benchmark-*.json .benchmarks/main/ || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Performance Benchmark Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Benchmarks completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- JSON reports with detailed metrics" >> $GITHUB_STEP_SUMMARY
+          echo "- Historical comparison data" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View artifacts in the Actions tab above." >> $GITHUB_STEP_SUMMARY

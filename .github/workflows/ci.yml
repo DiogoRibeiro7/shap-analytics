@@ -7,71 +7,179 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+# Cancel in-progress runs for the same workflow
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_VERSION: "1.7.1"
+  PYTHON_DEFAULT_VERSION: "3.10"
+
 jobs:
   lint:
     name: Lint and Format Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Full history for better analysis
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: 'pip'
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Load cached venv
+      - name: Cache Poetry dependencies
         id: cached-poetry-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-lint-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            venv-lint-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --no-root --only dev
 
       - name: Install project
         run: poetry install --no-interaction
 
+      - name: Cache Ruff
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ruff
+          key: ruff-${{ runner.os }}-${{ hashFiles('.ruff.toml', 'pyproject.toml') }}
+
       - name: Run Ruff linter
-        run: poetry run ruff check src/ tests/
+        run: |
+          poetry run ruff check src/ tests/ --output-format=github
 
       - name: Run Ruff formatter check
-        run: poetry run ruff format --check src/ tests/
+        run: |
+          poetry run ruff format --check src/ tests/
+
+      - name: Annotate code with linting results
+        if: always()
+        run: |
+          poetry run ruff check src/ tests/ --output-format=github || true
 
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: 'pip'
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Load cached venv
+      - name: Cache Poetry dependencies
         id: cached-poetry-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-typecheck-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            venv-typecheck-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root --with dev
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Cache MyPy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-${{ hashFiles('**/poetry.lock', 'pyproject.toml') }}
+          restore-keys: |
+            mypy-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-
+
+      - name: Run MyPy type checker
+        run: |
+          poetry run mypy --strict src/shap_analytics --no-error-summary
+
+      - name: Generate MyPy report
+        if: always()
+        run: |
+          poetry run mypy --strict src/shap_analytics --html-report mypy-report --no-error-summary || true
+
+      - name: Upload MyPy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mypy-report
+          path: mypy-report/
+          retention-days: 30
+
+  test:
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.10', '3.11', '3.12']
+        include:
+          # Test on macOS with latest Python
+          - os: macos-latest
+            python-version: '3.12'
+          # Test on Windows with default Python
+          - os: windows-latest
+            python-version: '3.10'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Needed for coverage
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry dependencies
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-test-${{ matrix.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            venv-test-${{ matrix.os }}-py${{ matrix.python-version }}-
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
@@ -80,101 +188,248 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
-      - name: Run MyPy type checker
-        run: poetry run mypy --strict src/shap_analytics
+      - name: Cache pytest
+        uses: actions/cache@v4
+        with:
+          path: .pytest_cache
+          key: pytest-${{ matrix.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock', 'pyproject.toml') }}
+          restore-keys: |
+            pytest-${{ matrix.os }}-py${{ matrix.python-version }}-
 
-  test:
-    name: Test (Python ${{ matrix.python-version }})
+      - name: Run dependency compatibility tests
+        run: |
+          poetry run pytest tests/test_dependencies.py -v --tb=short
+
+      - name: Run pytest with coverage
+        run: |
+          poetry run pytest -v \
+            --cov=src/shap_analytics \
+            --cov-report=xml \
+            --cov-report=term \
+            --cov-report=html \
+            --junitxml=pytest-results.xml \
+            -m "not slow"
+
+      - name: Upload coverage reports to Codecov
+        if: matrix.python-version == '3.10' && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests,python-${{ matrix.python-version }}
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
+          fail_ci_if_error: true
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            pytest-results.xml
+            htmlcov/
+          retention-days: 30
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.10' && matrix.os == 'ubuntu-latest'
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINIMUM_GREEN: 80
+          MINIMUM_ORANGE: 70
+
+  test-slow:
+    name: Slow Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.12']
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Load cached venv
-        id: cached-poetry-dependencies
+      - name: Cache Poetry dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-slow-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
+        run: |
+          poetry install --no-interaction --no-root
+          poetry install --no-interaction
 
-      - name: Install project
-        run: poetry install --no-interaction
-
-      - name: Run pytest
-        run: poetry run pytest -v --cov=src/shap_analytics --cov-report=xml --cov-report=term
-
-      - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.10'
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+      - name: Run slow tests
+        run: |
+          poetry run pytest -v -m "slow" --tb=short
 
   build:
     name: Build Package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [lint, typecheck, test]
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Needed for versioning
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: 'pip'
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.7.1
+          version: ${{ env.POETRY_VERSION }}
 
       - name: Build package
-        run: poetry build
+        run: |
+          poetry build
+          poetry run pip install twine
+          poetry run twine check dist/*
+
+      - name: Extract package metadata
+        id: metadata
+        run: |
+          VERSION=$(poetry version -s)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-${{ steps.metadata.outputs.version }}
           path: dist/
+          retention-days: 90
 
-  # security:
-  #   name: Security Scan
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v5
+      - name: Upload to release (if tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
 
-  #     - name: Run Trivy vulnerability scanner
-  #       uses: aquasecurity/trivy-action@v0.28.0
-  #       with:
-  #         scan-type: 'fs'
-  #         scan-ref: '.'
-  #         format: 'sarif'
-  #         output: 'trivy-results.sarif'
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, build]
+    if: always()
+    steps:
+      - name: Check CI status
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" ]] || \
+             [[ "${{ needs.typecheck.result }}" != "success" ]] || \
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "CI checks failed!"
+            exit 1
+          fi
 
-  #     - name: Upload Trivy results to GitHub Security
-  #       uses: github/codeql-action/upload-sarif@v3
-  #       if: always()
-  #       with:
-  #         sarif_file: 'trivy-results.sarif'
+      - name: Generate summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # CI Pipeline Summary
+
+          ## Job Status
+
+          | Job | Status | Duration |
+          |-----|--------|----------|
+          | Lint | ${{ needs.lint.result }} | - |
+          | Type Check | ${{ needs.typecheck.result }} | - |
+          | Tests | ${{ needs.test.result }} | - |
+          | Build | ${{ needs.build.result }} | - |
+
+          ## Details
+
+          - **Branch**: ${{ github.ref_name }}
+          - **Commit**: ${{ github.sha }}
+          - **Triggered by**: ${{ github.event_name }}
+          - **Actor**: ${{ github.actor }}
+
+          ## Next Steps
+
+          - [ ] Review test coverage reports
+          - [ ] Check security scan results
+          - [ ] Review type checking report
+          - [ ] Verify build artifacts
+
+          ---
+          *CI completed on: $(date -u)*
+          EOF
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('CI Pipeline Summary');
+            });
+
+            const output = `## CI Pipeline Summary
+
+            | Job | Status |
+            |-----|--------|
+            | Lint | ${{ needs.lint.result }} |
+            | Type Check | ${{ needs.typecheck.result }} |
+            | Tests | ${{ needs.test.result }} |
+            | Build | ${{ needs.build.result }} |
+
+            **Branch**: \`${{ github.ref_name }}\`
+            **Commit**: \`${{ github.sha }}\`
+
+            ${
+              '${{ needs.lint.result }}' === 'success' &&
+              '${{ needs.typecheck.result }}' === 'success' &&
+              '${{ needs.test.result }}' === 'success' &&
+              '${{ needs.build.result }}' === 'success'
+                ? '✅ All checks passed!'
+                : '❌ Some checks failed. Please review the workflow logs.'
+            }
+
+            ---
+            *Updated: ${new Date().toISOString()}*`;
+
+            if (botComment) {
+              github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: output
+              });
+            } else {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: output
+              });
+            }
