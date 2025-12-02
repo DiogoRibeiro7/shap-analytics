@@ -48,7 +48,7 @@ jobs:
           pip install -r examples/requirements.txt
 
       - name: Cache baseline benchmarks
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .benchmarks
           key: benchmark-baseline-${{ runner.os }}-${{ github.base_ref || 'main' }}
