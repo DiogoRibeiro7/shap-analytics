@@ -465,7 +465,7 @@ jobs:
         if: |
           needs.build-and-test.result == 'failure' ||
           needs.publish.result == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             await github.rest.issues.create({
