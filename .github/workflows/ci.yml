@@ -42,7 +42,7 @@ jobs:
 
       - name: Cache Poetry dependencies
         id: cached-poetry-dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: venv-lint-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-${{ hashFiles('**/poetry.lock') }}
@@ -57,7 +57,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Cache Ruff
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ruff
           key: ruff-${{ runner.os }}-${{ hashFiles('.ruff.toml', 'pyproject.toml') }}
@@ -98,7 +98,7 @@ jobs:
 
       - name: Cache Poetry dependencies
         id: cached-poetry-dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: venv-typecheck-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-${{ hashFiles('**/poetry.lock') }}
@@ -113,7 +113,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Cache MyPy
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .mypy_cache
           key: mypy-${{ runner.os }}-py${{ env.PYTHON_DEFAULT_VERSION }}-${{ hashFiles('**/poetry.lock', 'pyproject.toml') }}
@@ -167,7 +167,7 @@ jobs:
 
       - name: Cache Poetry dependencies
         id: cached-poetry-dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: venv-test-${{ matrix.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
@@ -182,7 +182,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Cache pytest
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .pytest_cache
           key: pytest-${{ matrix.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock', 'pyproject.toml') }}
@@ -261,7 +261,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Cache Poetry dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: venv-slow-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
