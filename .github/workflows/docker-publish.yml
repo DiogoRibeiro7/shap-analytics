@@ -393,7 +393,7 @@ jobs:
           EOF
 
       - name: Update container description
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
