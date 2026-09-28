@@ -13,7 +13,7 @@ matplotlib>=3.7.0
 
 # Advanced visualization (required for custom_visualization.py)
 plotly>=5.17.0
-kaleido>=0.2.1  # For static image export
+kaleido>=1.4.0  # For static image export
 
 # API deployment (required for api_deployment.py)
 fastapi>=0.104.0
