@@ -66,7 +66,7 @@ cryptography = "^46.0.3"
 mkdocs = "^1.5.3"
 mkdocs-material = "^9.5.0"
 mkdocstrings = {extras = ["python"], version = "^0.30.1"}
-pymdown-extensions = "^10.7.0"
+pymdown-extensions = ">=10.7,<13.0"
 
 [tool.poetry.scripts]
 shap-analytics = "shap_analytics.cli:main"
