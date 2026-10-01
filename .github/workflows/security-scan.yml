@@ -42,7 +42,7 @@ jobs:
           bandit -r src/ --severity-level medium --confidence-level medium
 
       - name: Upload Bandit results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bandit-results
@@ -89,7 +89,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Safety results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: safety-results
@@ -169,7 +169,7 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
 
       - name: Upload Trivy filesystem results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-filesystem-results
@@ -208,7 +208,7 @@ jobs:
           output: 'trivy-config-report.txt'
 
       - name: Upload Trivy config results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-config-results
@@ -262,7 +262,7 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
 
       - name: Upload Trivy Docker results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-docker-results
@@ -325,7 +325,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload pip-audit results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pip-audit-results

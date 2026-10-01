@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload outdated packages list
         if: steps.check.outputs.has_updates == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: outdated-packages
           path: outdated.txt
@@ -178,7 +178,7 @@ jobs:
 
       - name: Upload update artifacts
         if: steps.update.outputs.updated == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: update-${{ matrix.update-group.name }}
           path: |
