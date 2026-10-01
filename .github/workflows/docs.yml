@@ -48,7 +48,7 @@ jobs:
         run: poetry run mkdocs build --strict
 
       - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: docs
           path: site/
